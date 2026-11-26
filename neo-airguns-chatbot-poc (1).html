@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NEO Airguns – AI Shopping Assistant (POC)</title>
+<style>
+/* ===== Brand tokens =====
+   Auto-sync: when embedded on the live site, syncTheme() (in JS) reads the site's own button colour & font.
+   Or paste exact hex codes here (DevTools > primary button / header). */
+:root{
+  --neo-ink:#0c0c0d;          /* header, user bubble */
+  --neo-accent:#e8541e;       /* buttons, links, highlights */
+  --neo-accent-ink:#fff;      /* text on accent */
+  --neo-paper:#ffffff; --neo-soft:#f4f4f5; --neo-line:#e4e4e7; --neo-text:#111113; --neo-muted:#6b7280;
+  --neo-font:inherit; --neo-radius:20px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Inter","Helvetica Neue",Arial,sans-serif;background:#ececee;color:#111;min-height:100vh}
+.demo{max-width:860px;margin:0 auto;padding:56px 24px;text-align:center}
+.demo h1{font-size:26px;margin-bottom:10px}.demo p{color:#555;line-height:1.7}
+.demo code{background:#fff;padding:2px 7px;border-radius:5px;font-size:13px}
+
+#neo-launcher,#neo-chat,#neo-chat *{font-family:var(--neo-font,inherit)}
+#neo-launcher{position:fixed;right:calc(22px + env(safe-area-inset-right,0px));bottom:calc(22px + env(safe-area-inset-bottom,0px));height:60px;min-width:60px;padding:0 20px 0 16px;border:0;border-radius:999px;cursor:pointer;z-index:99998;
+  background:var(--neo-ink);color:#fff;box-shadow:0 12px 32px rgba(0,0,0,.32);display:flex;align-items:center;gap:10px;font-weight:600;font-size:14px;transition:transform .25s,box-shadow .25s}
+#neo-launcher:hover{transform:translateY(-3px);box-shadow:0 16px 38px rgba(0,0,0,.4)}
+#neo-launcher .lic{width:34px;height:34px;border-radius:50%;background:var(--neo-accent);color:var(--neo-accent-ink);display:grid;place-items:center;position:relative}
+#neo-launcher .lic svg{width:18px;height:18px}
+#neo-launcher .lic::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--neo-accent);animation:ping 2.4s infinite}
+@keyframes ping{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.7);opacity:0}}
+#neo-launcher.hide{transform:scale(0);pointer-events:none}
+@media (max-width:520px){#neo-launcher span.lt{display:none}#neo-launcher{padding:0 13px;height:58px}}
+
+#neo-chat{position:fixed;right:calc(22px + env(safe-area-inset-right,0px));bottom:calc(22px + env(safe-area-inset-bottom,0px));width:404px;height:min(680px,calc(100vh - 44px));z-index:99999;
+  display:flex;flex-direction:column;background:var(--neo-paper);color:var(--neo-text);border-radius:var(--neo-radius);overflow:hidden;
+  box-shadow:0 30px 80px rgba(0,0,0,.28),0 0 0 1px rgba(0,0,0,.06);transform-origin:bottom right;transition:transform .32s cubic-bezier(.2,.8,.2,1),opacity .25s,height .3s}
+#neo-chat.closed{transform:scale(.88) translateY(24px);opacity:0;pointer-events:none}
+#neo-chat.min{height:72px}
+@media (min-width:521px) and (max-width:900px){#neo-chat{width:370px}}
+@media (max-width:520px){#neo-chat{right:0;bottom:0;width:100%;height:100dvh;border-radius:0}#neo-chat.min{height:calc(72px + env(safe-area-inset-bottom,0px))}}
+
+.hd{position:relative;display:flex;align-items:center;gap:12px;padding:16px 12px 16px 18px;padding-top:max(16px,env(safe-area-inset-top,0px));background:var(--neo-ink);color:#fff;flex:none}
+.hd::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--neo-accent)}
+.logo{width:42px;height:42px;border-radius:12px;background:#fff;color:var(--neo-ink);display:grid;place-items:center;font-weight:900;font-size:14px;letter-spacing:.5px;flex:none;position:relative}
+.logo sup{font-size:7px;position:absolute;top:8px;right:5px}
+.hd .t{flex:1;min-width:0}.hd b{display:block;font-size:16px;letter-spacing:.2px}
+.hd small{color:rgba(255,255,255,.65);font-size:12px;display:flex;align-items:center;gap:6px;margin-top:2px}
+.hd small i{width:7px;height:7px;border-radius:50%;background:#3ecf6e;box-shadow:0 0 0 3px rgba(62,207,110,.25)}
+.ib{background:transparent;border:0;color:rgba(255,255,255,.7);width:34px;height:34px;border-radius:10px;cursor:pointer;display:grid;place-items:center;transition:.2s}
+.ib:hover{background:rgba(255,255,255,.14);color:#fff}.ib svg{width:17px;height:17px}
+
+#msgs{flex:1;overflow-y:auto;padding:18px 16px 8px;display:flex;flex-direction:column;gap:14px;scroll-behavior:smooth;overscroll-behavior:contain;background:linear-gradient(180deg,var(--neo-soft),var(--neo-paper) 220px)}
+#msgs::-webkit-scrollbar{width:6px}#msgs::-webkit-scrollbar-thumb{background:var(--neo-line);border-radius:3px}
+.brow{display:flex;gap:9px;align-items:flex-end;max-width:92%;animation:in .3s ease both}
+.bav{width:28px;height:28px;border-radius:9px;background:var(--neo-ink);color:#fff;font-weight:800;font-size:11px;display:grid;place-items:center;flex:none}
+@keyframes in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.m{padding:11px 15px;font-size:14px;line-height:1.55;word-wrap:break-word}
+.m.bot{background:var(--neo-paper);border:1px solid var(--neo-line);border-radius:16px 16px 16px 4px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.m.user{align-self:flex-end;max-width:84%;background:var(--neo-ink);color:#fff;border-radius:16px 16px 4px 16px;animation:in .3s ease both}
+.m a{color:var(--neo-accent);font-weight:600}.m b{font-weight:700}.m ul{margin:6px 0 0 18px}.m li{margin-bottom:3px}
+.m.typing{display:flex;gap:5px;padding:15px 17px}
+.m.typing span{width:7px;height:7px;border-radius:50%;background:var(--neo-muted);animation:bl 1.2s infinite}
+.m.typing span:nth-child(2){animation-delay:.15s}.m.typing span:nth-child(3){animation-delay:.3s}
+@keyframes bl{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-4px)}}
+
+/* Welcome tiles */
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:9px;animation:in .4s .1s ease both}
+.tile{display:flex;align-items:center;gap:10px;text-align:left;background:var(--neo-paper);border:1px solid var(--neo-line);border-radius:14px;padding:12px;cursor:pointer;font:inherit;color:inherit;transition:.2s}
+.tile:last-child{grid-column:1/-1}
+.tile:hover{border-color:var(--neo-ink);transform:translateY(-2px);box-shadow:0 8px 18px rgba(0,0,0,.08)}
+.tile .ti{width:34px;height:34px;border-radius:10px;background:var(--neo-soft);color:var(--neo-ink);display:grid;place-items:center;flex:none;transition:.2s}
+.tile:hover .ti{background:var(--neo-accent);color:var(--neo-accent-ink)}
+.tile .ti svg{width:18px;height:18px}
+.tile b{display:block;font-size:13px;font-weight:700}.tile small{display:block;font-size:11.5px;color:var(--neo-muted);margin-top:1px;line-height:1.3}
+
+/* Card carousel */
+.cards{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding:2px 2px 8px;margin:0 -16px;padding-left:16px;padding-right:16px;animation:in .35s ease both;scrollbar-width:thin}
+.cards::-webkit-scrollbar{height:5px}.cards::-webkit-scrollbar-thumb{background:var(--neo-line);border-radius:3px}
+.card{flex:0 0 158px;scroll-snap-align:start;display:flex;flex-direction:column;background:var(--neo-paper);border:1px solid var(--neo-line);border-radius:14px;overflow:hidden;text-decoration:none;color:inherit;transition:.2s}
+.card:hover{border-color:var(--neo-ink);transform:translateY(-3px);box-shadow:0 10px 22px rgba(0,0,0,.1)}
+.card .img{height:84px;background:var(--neo-soft) center/cover;display:grid;place-items:center;color:var(--neo-ink)}
+.card .img svg{width:30px;height:30px;opacity:.75}
+.card .b{padding:10px 11px 11px;display:flex;flex-direction:column;flex:1}
+.card .n{font-size:13px;font-weight:700;line-height:1.3}.card .s{font-size:11.5px;color:var(--neo-muted);margin-top:3px}
+.card .p{font-size:14px;font-weight:800;margin-top:5px}
+.card .go{font-size:12px;font-weight:700;color:var(--neo-accent);margin-top:auto;padding-top:9px}
+
+.chips{display:flex;flex-wrap:wrap;gap:7px;padding-left:37px;animation:in .35s ease both}
+.chip{background:var(--neo-paper);color:var(--neo-text);border:1px solid var(--neo-line);padding:7px 13px;border-radius:999px;font:inherit;font-size:12.5px;font-weight:500;cursor:pointer;transition:.2s}
+.chip:hover{background:var(--neo-ink);border-color:var(--neo-ink);color:#fff}
+
+.ft{padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));background:var(--neo-paper);border-top:1px solid var(--neo-line);flex:none}
+.row{display:flex;gap:8px;align-items:center;background:var(--neo-soft);border:1px solid var(--neo-line);border-radius:999px;padding:5px 5px 5px 16px;transition:.2s}
+.row:focus-within{border-color:var(--neo-ink);background:#fff}
+#inp{flex:1;background:transparent;border:0;color:var(--neo-text);font:inherit;font-size:14px;outline:none;min-width:0;padding:8px 0}
+#send{width:40px;height:40px;border-radius:50%;border:0;background:var(--neo-accent);color:var(--neo-accent-ink);cursor:pointer;display:grid;place-items:center;flex:none;transition:.2s}
+#send:hover:not(:disabled){transform:scale(1.07)}#send:disabled{opacity:.35;cursor:not-allowed}#send svg{width:17px;height:17px}
+.note{font-size:10.5px;color:var(--neo-muted);text-align:center;margin-top:8px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ===== Homepage replica (demo backdrop) ===== */
+body{background:#fff;font-family:"Inter","Helvetica Neue",Arial,sans-serif}
+.site a{color:inherit;text-decoration:none}
+.topbar{background:#0c0c0d;color:#d4d4d8;font-size:12px;text-align:center;padding:8px 12px}
+.sh{display:flex;align-items:center;gap:28px;padding:16px 4vw;border-bottom:1px solid #e4e4e7;position:sticky;top:0;background:#fff;z-index:5}
+.slogo{font-weight:900;font-size:26px;letter-spacing:1px}.slogo sup{font-size:10px}
+.snav{display:flex;gap:26px;font-weight:600;font-size:14px;flex:1}.snav a:hover{color:var(--neo-accent)}
+.ssearch{display:flex;align-items:center;gap:8px;border:1px solid #e4e4e7;border-radius:999px;padding:9px 16px;color:#71717a;font-size:13px;min-width:180px}
+.ssearch svg,.sicon svg{width:18px;height:18px}.sicon{display:grid;place-items:center}
+.hero{display:grid;grid-template-columns:2fr 2fr 1.3fr;gap:14px;padding:22px 4vw}
+.hb{min-height:300px;border-radius:16px;padding:26px;display:flex;flex-direction:column;justify-content:flex-end;color:#fff;background:linear-gradient(160deg,#27272a,#0c0c0d);transition:.25s}
+.hb.alt{background:linear-gradient(160deg,#3f3f46,#18181b)}.hb:hover{transform:translateY(-3px)}
+.hb small{opacity:.7;font-size:12px;letter-spacing:1px;text-transform:uppercase}.hb b{font-size:28px;margin-top:4px}
+.depts{padding:20px 4vw 40px}.dh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px}
+.dh h2{font-size:22px}.dh a{font-weight:600;font-size:14px}
+.dg{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
+.dt{height:120px;border:1px solid #e4e4e7;border-radius:14px;display:grid;place-items:center;font-weight:700;background:#f4f4f5;transition:.2s}
+.dt:hover{background:#0c0c0d;color:#fff;border-color:#0c0c0d}
+.sf{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;background:#0c0c0d;color:#a1a1aa;padding:40px 4vw 24px;font-size:13px;line-height:1.9}
+.sf b{color:#fff;font-size:14px}.sf a:hover{color:#fff}.cp{grid-column:1/-1;border-top:1px solid #27272a;padding-top:16px;font-size:12px}
+#live{position:fixed;inset:0;width:100%;height:100%;border:0;z-index:1}
+@media(max-width:820px){.snav,.ssearch{display:none}.sh{justify-content:space-between}.hero{grid-template-columns:1fr}.hb{min-height:160px}.sf{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="site">
+  <div class="topbar">Tuesday to Friday 10:30 – 18:00 · Saturday 10:30 – 17:00 · 264 Upper Street, London, N1 2UQ</div>
+  <header class="sh">
+    <a class="slogo" href="https://neoairguns.co.uk/" target="_blank" rel="noopener">NEO<sup>®</sup></a>
+    <nav class="snav"><a href="https://neoairguns.co.uk/product-category/all-products/" target="_blank" rel="noopener">Guns</a><a href="https://neoairguns.co.uk/product-category/all-products/" target="_blank" rel="noopener">Gun Accessories</a><a href="https://neoairguns.co.uk/product-category/all-products/" target="_blank" rel="noopener">Gear</a><a href="https://neoairguns.co.uk/product-tag/beretta/" target="_blank" rel="noopener">Beretta</a></nav>
+    <div class="ssearch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><span>Search</span></div>
+    <a class="sicon" href="https://neoairguns.co.uk/my-account/" target="_blank" rel="noopener" aria-label="My account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg></a>
+    <a class="sicon" href="https://neoairguns.co.uk/cart/" target="_blank" rel="noopener" aria-label="Cart"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 4h3l2 12h10l2-9H7"/><circle cx="10" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/></svg></a>
+  </header>
+  <section class="hero">
+    <a class="hb" href="https://neoairguns.co.uk/product-category/airsoft-guns/" target="_blank" rel="noopener"><small>Shop</small><b>Airsoft Guns</b></a>
+    <a class="hb" href="https://neoairguns.co.uk/product-category/airguns/" target="_blank" rel="noopener"><small>Shop</small><b>Air Guns</b></a>
+    <a class="hb alt" href="https://neoairguns.co.uk/product-tag/beretta/" target="_blank" rel="noopener"><small>Brand</small><b>Beretta</b></a>
+  </section>
+  <section class="depts">
+    <div class="dh"><h2>Shop all departments</h2><a href="https://neoairguns.co.uk/product-category/all-products/" target="_blank" rel="noopener">See all →</a></div>
+    <div class="dg"><a class="dt" href="https://neoairguns.co.uk/product-category/airsoft-guns/" target="_blank" rel="noopener"><span>Airsoft Guns</span></a><a class="dt" href="https://neoairguns.co.uk/product-category/airguns/" target="_blank" rel="noopener"><span>Air Guns</span></a><a class="dt" href="https://neoairguns.co.uk/product-category/gun-optics/" target="_blank" rel="noopener"><span>Gun Optics</span></a><a class="dt" href="https://neoairguns.co.uk/product-category/grips/" target="_blank" rel="noopener"><span>Grips</span></a><a class="dt" href="https://neoairguns.co.uk/product-category/apparel/" target="_blank" rel="noopener"><span>Clothing</span></a><a class="dt" href="https://neoairguns.co.uk/product-category/gloves/" target="_blank" rel="noopener"><span>Gloves</span></a><a class="dt" href="https://neoairguns.co.uk/product-category/caps/" target="_blank" rel="noopener"><span>Caps</span></a><a class="dt" href="https://neoairguns.co.uk/product-category/holsters/" target="_blank" rel="noopener"><span>Holsters</span></a><a class="dt" href="https://neoairguns.co.uk/?s=vortex&post_type=product" target="_blank" rel="noopener"><span>Vortex</span></a></div>
+  </section>
+  <footer class="sf">
+    <div><b>Opening hours</b><br>Tuesday to Friday<br>10:30 – 18:00<br>Saturday<br>10:30 – 17:00</div>
+    <div><b>Contact</b><br>info@neoairguns.co.uk<br>(+44) 020 7916 6597<br>264 Upper Street<br>London, N1 2UQ</div>
+    <div><b>Information</b><br><a href="https://neoairguns.co.uk/about-us/" target="_blank" rel="noopener">About Us</a><br><a href="https://neoairguns.co.uk/our-brands/" target="_blank" rel="noopener">Our Partners</a><br><a href="https://neoairguns.co.uk/returns-policy/" target="_blank" rel="noopener">Returns Policy</a><br><a href="https://neoairguns.co.uk/terms-and-conditions/" target="_blank" rel="noopener">Terms &amp; Conditions</a></div>
+    <div class="cp">Copyright © NEO. 2026 All rights reserved.</div>
+  </footer>
+</div>
+<iframe id="live" title="NEO Airguns live site" src="about:blank" hidden></iframe>
+<script>
+/* Optional: open this file with ?live=1 to show the real site in an iframe behind the widget
+   (works only if the site allows framing, otherwise the browser shows a blank/blocked frame). */
+if(/[?&]live=1/.test(location.search)){const f=document.getElementById("live");f.src="https://neoairguns.co.uk/";f.hidden=false;document.querySelector(".site").hidden=true;}
+</script>
+
+<button id="neo-launcher" aria-label="Open NEO AI assistant"><span class="lic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></span><span class="lt">Ask NEO AI</span></button>
+
+<section id="neo-chat" class="closed" role="dialog" aria-label="NEO AI shopping assistant">
+  <header class="hd">
+    <div class="logo">NEO<sup>®</sup></div>
+    <div class="t"><b>NEO Assistant</b><small><i></i> AI shopping assistant · Online</small></div>
+    <button class="ib" id="b-clear" title="Clear chat" aria-label="Clear chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>
+    <button class="ib" id="b-min" title="Minimise" aria-label="Minimise"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+    <button class="ib" id="b-close" title="Close" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </header>
+  <div id="msgs" aria-live="polite"></div>
+  <footer class="ft">
+    <div class="row"><input id="inp" type="text" placeholder="Ask about products, delivery, returns…" autocomplete="off" maxlength="300">
+    <button id="send" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg></button></div>
+    <div class="note">AI can make mistakes – check details on the product page · 18+ only</div>
+  </footer>
+</section>
+
+<script>
+(() => {
+"use strict";
+
+/* ================= CONFIG ================= */
+const CFG = {
+  site: "https://neoairguns.co.uk",
+  email: "info@neoairguns.co.uk",
+  phone: "(+44) 020 7916 6597", tel: "02079166597",
+  hours: "Tuesday to Friday 10:30 – 18:00, Saturday 10:30 – 17:00",
+  address: "264 Upper Street, London, N1 2UQ",
+  /* Future: point at YOUR server-side proxy (it holds the OpenAI key – never put keys in the browser). */
+  apiEndpoint: null,        // e.g. "/wp-json/neo-chat/v1/message"
+  typingMs: [700, 1300]
+};
+const U = p => CFG.site + p;
+
+/* ============ CATALOGUE ADAPTER ============
+   Verified category links from the live nav. Replace getProducts() with a WooCommerce
+   REST call (via your server) to return {name,price,image,url}. Cards only show
+   price/image when present – nothing is ever invented. */
+const CAT = {
+  assault:{n:"Airsoft Assault Rifles",u:"/product-category/airsoft-assault-rifles/"},
+  smg:{n:"Airsoft SMGs",u:"/product-category/airsoft-smgs/"},
+  aspistol:{n:"Airsoft Pistols",u:"/product-category/airsoft-pistols/"},
+  sniper:{n:"Airsoft Sniper Rifles",u:"/product-category/airsoft-sniper-rifles/"},
+  shotgun:{n:"Airsoft Shotguns",u:"/product-category/airsoft-shotguns/"},
+  spring:{n:"Spring Air Rifles",u:"/product-category/spring-air-rifles/"},
+  co2r:{n:"CO₂ Air Rifles",u:"/product-category/air-rifles/co2-air-rifles/"},
+  gasram:{n:"Gas Ram Air Rifles",u:"/product-category/gas-ram-air-rifles/"},
+  pcpr:{n:"PCP Air Rifles",u:"/product-category/pcp-air-rifles/"},
+  springp:{n:"Spring Air Pistols",u:"/product-category/spring-air-pistols/"},
+  co2p:{n:"CO₂ Air Pistols",u:"/product-category/co2-air-pistols/"},
+  pcpp:{n:"PCP Air Pistols",u:"/product-category/pcp-air-pistols/"},
+  scopes:{n:"Rifle Scopes & Rings",u:"/product-category/rifle-scopes/"},
+  dots:{n:"Dot Sights",u:"/product-category/dot-sights/"},
+  mags:{n:"Magnifiers",u:"/product-category/magnifiers/"},
+  bbs:{n:"Airsoft BBs",u:"/product-category/airsoft-ammunition/"},
+  pellets:{n:"Air Gun Ammunition",u:"/product-category/air-gun-ammunition/"},
+  gas:{n:"Gas",u:"/product-category/airsoft-ammunition/gas/"},
+  batt:{n:"Batteries & Chargers",u:"/product-category/batteries/"},
+  maint:{n:"Gun Maintenance",u:"/product-category/maintenance-oils/"},
+  rcase:{n:"Rifle Cases",u:"/product-category/rifle-cases/"},
+  pcase:{n:"Pistol Cases",u:"/product-category/pistol-cases/"},
+  holster:{n:"Holsters",u:"/product-category/holsters/"},
+  gloves:{n:"Gloves",u:"/product-category/gloves/"},
+  glasses:{n:"Glasses",u:"/product-category/glasses/"},
+  helmets:{n:"Helmets",u:"/product-category/helmets/"},
+  face:{n:"Face Protection",u:"/product-category/face-protection/"},
+  rigs:{n:"Chest Rigs & Carriers",u:"/product-category/chest-rigs-carriers/"},
+  bags:{n:"Rucksacks & Bags",u:"/product-category/rucksacks-bags/"},
+  apparel:{n:"Clothing",u:"/product-category/apparel/"},
+  grips:{n:"Grips",u:"/product-category/grips/"},
+  stocks:{n:"Stocks",u:"/product-category/stocks/"},
+  slings:{n:"Slings",u:"/product-category/slings/"},
+  bipods:{n:"Bipods",u:"/product-category/bipods/"},
+  all:{n:"Shop all products",u:"/product-category/all-products/"},
+  airsoft:{n:"Airsoft Guns",u:"/product-category/airsoft-guns/"},
+  airguns:{n:"Air Guns",u:"/product-category/airguns/"},
+  optics:{n:"Gun Optics",u:"/product-category/gun-optics/"},
+  beretta:{n:"Beretta",u:"/product-tag/beretta/"},
+  vortex:{n:"Vortex",u:"/?s=vortex&post_type=product"}
+};
+const catCards = keys => keys.map(k => ({name:CAT[k].n, url:U(CAT[k].u), sub:"Browse category"}));
+async function getProducts(/* query */){ return []; } // TODO: WooCommerce REST (server-side)
+
+/* ============ KNOWLEDGE / INTENTS ============ */
+const SAFETY_REPLY = {
+  text:"I'm sorry, I can't help with modifying guns, increasing their power or anything that could cause harm. If your gun has a fault, please <b>don't try to fix it yourself</b> – contact our team and we'll advise on repair, exchange or refund options.",
+  cards:null, chips:["Returns for faulty items","Contact Support","UK Air Gun Law"], topic:"safety"
+};
+const I = []; // {id, kw:[], fn(ctx)}
+const add = (id, kw, fn) => I.push({id, kw, fn});
+
+add("greet",["hello","hi","hey","good morning","good afternoon"], () => ({
+  text:"Hi there! What are you shopping for today – airsoft, air rifles, accessories or gear?", chips:["Explore Products","Delivery & Returns","Contact Support"], topic:"greet"}));
+
+add("explore",["explore","browse","products","shop","what do you sell","what do you have","categories","catalogue"], () => ({
+  text:"We have four main areas. Pick one to explore:", cards:catCards(["airsoft","airguns","optics","gloves","apparel","holster"]),
+  chips:["I'm new to airsoft","I'm new to air rifles","Show me eyewear","Accessories"], topic:"explore"}));
+
+add("beginner_airsoft",["new to airsoft","beginner airsoft","start airsoft","first airsoft","airsoft starter"], () => ({
+  text:"Great choice! A typical starter set-up is: a <b>gun</b>, <b>BBs</b>, <b>eye protection</b> (essential) and a <b>battery/charger</b> or <b>gas</b> depending on the model. Here are good places to start:",
+  cards:catCards(["assault","aspistol","bbs","glasses"]), chips:["Face protection","Batteries & chargers","UK airsoft rules"], topic:"airsoft"}));
+
+add("airsoft",["airsoft","bb gun","aeg","assault rifle","smg","sniper","shotgun","pistol airsoft"], q => {
+  const k = /smg/.test(q)?"smg":/sniper/.test(q)?"sniper":/shotgun/.test(q)?"shotgun":/pistol/.test(q)?"aspistol":/assault|aeg|rifle/.test(q)?"assault":null;
+  return {text:k?`Here's our <b>${CAT[k].n}</b> range:`:"Our airsoft range covers these types of gun:",
+   cards:catCards(k?[k,"bbs","glasses","batt"]:["assault","smg","aspistol","sniper","shotgun"]),
+   chips:["Airsoft BBs","Eye protection","UK airsoft rules"], topic:"airsoft"};});
+
+add("airrifle",["air rifle","airgun","air gun","air pistol","pcp","spring","co2","gas ram","gas piston","pellet gun"], q => {
+  if(/pistol/.test(q)) return {text:"Our air pistols come in a few power types:",cards:catCards(["springp","co2p","pcpp"]),chips:["Spring vs CO₂ vs PCP","Pellets","Air gun law"],topic:"airguns"};
+  const k=/pcp/.test(q)?"pcpr":/co2/.test(q)?"co2r":/gas/.test(q)?"gasram":/spring/.test(q)?"spring":null;
+  return {text:k?`Here are our <b>${CAT[k].n}</b>:`:"Our air rifles come in four power types:",cards:catCards(k?[k,"pellets","scopes","rcase"]:["spring","co2r","gasram","pcpr"]),
+   chips:["Spring vs CO₂ vs PCP","Scopes","Air gun law"],topic:"airguns"};});
+
+add("compare",["difference","vs","versus","compare","which is better","what's best","which type"], (q,ctx) => ({
+  text:"General guide to air gun power types:<ul><li><b>Spring / gas ram</b> – self-contained, no extra kit needed; simple and popular for beginners.</li><li><b>CO₂</b> – uses small CO₂ capsules; easy to use and often semi-auto.</li><li><b>PCP</b> – uses pre-charged air, so needs a pump, compressor or tank; usually chosen by more experienced users.</li></ul>Specific power and performance details vary by model, so please check each product page.",
+  cards:catCards(["spring","co2r","gasram","pcpr"]), chips:["Pellets","Scopes","Contact Support"], topic:"airguns"}));
+
+add("optics",["scope","optic","dot sight","red dot","magnifier","sight","rings"], q => ({
+  text:"We stock a range of optics. If you're unsure what suits your gun, our <a href='"+U("/scope-guide/")+"' target='_blank' rel='noopener'>Scope Guide</a> is a good start.",
+  cards:catCards(/dot/.test(q)?["dots","mags","scopes"]:["scopes","dots","mags"]), chips:["Mounts & rails","Brands: Vortex","Contact Support"], topic:"optics"}));
+
+add("ammo",["bb","bbs","pellet","ammo","ammunition","gas","battery","batteries","charger","magazine"], q => {
+  const k=/pellet/.test(q)?["pellets"]:/gas/.test(q)?["gas","bbs"]:/batter|charger/.test(q)?["batt"]:["bbs","pellets","gas","batt"];
+  return {text:"Here are the ammo and power supplies categories. Always check your gun's product page for compatible ammo and power sources.",cards:catCards(k),chips:["Maintenance","Cases","Contact Support"],topic:"ammo"};});
+
+add("gear",["gear","clothing","gloves","glasses","goggles","eye protection","helmet","face","mask","rig","vest","bag","rucksack","apparel","hat","cap","boonie","belt"], q => {
+  const k=/glove/.test(q)?["gloves"]:/glass|goggle|eye/.test(q)?["glasses","face","helmets"]:/helmet/.test(q)?["helmets","face"]:/face|mask/.test(q)?["face","glasses"]:/rig|vest/.test(q)?["rigs","bags"]:/bag|rucksack/.test(q)?["bags","rigs"]:["gloves","glasses","helmets","rigs","apparel"];
+  return {text:/glass|goggle|eye|face|mask/.test(q)?"Eye protection is essential when using airsoft or air guns. Here's what we have:":"Here's our tactical gear and apparel:",cards:catCards(k),chips:["Airsoft guns","Holsters & cases","Delivery & Returns"],topic:"gear"};});
+
+add("storage",["case","holster","storage","carry","transport"], () => ({
+  text:"For safe carrying and storage, take a look at these:",cards:catCards(["rcase","pcase","holster"]),chips:["UK air gun law","Contact Support"],topic:"storage"}));
+
+add("brands",["brand","beretta","vortex","partner","dark divisions"], q => ({
+  text:"Here are some brand shortcuts. You can see all our partners on the <a href='"+U("/our-brands/")+"' target='_blank' rel='noopener'>Our Partners</a> page.",
+  cards:catCards(/vortex/.test(q)?["vortex","scopes"]:/beretta/.test(q)?["beretta","apparel"]:["beretta","vortex"]),chips:["Explore Products","Contact Support"],topic:"brands"}));
+
+add("maint",["maintenance","clean","oil","lube","care"], () => ({
+  text:"For general upkeep, use only the products recommended for your gun. Using the wrong oils or gas can void your warranty. Browse the category here:",cards:catCards(["maint"]),chips:["Returns for faulty items","Contact Support"],topic:"maint"}));
+
+add("delivery",["deliver","delivery","shipping","postage","dispatch","courier","how long","arrive","tracking"], () => ({
+  text:"For up-to-date delivery options, costs and timings, please see our <a href='"+U("/collections/")+"' target='_blank' rel='noopener'>Delivery Information</a> page. Shipping and taxes are calculated at checkout. For a specific order, email <a href='mailto:"+CFG.email+"'>"+CFG.email+"</a> or call "+CFG.phone+" with your order number.<br><br>Note: you must be 18+ to buy from NEO.",
+  chips:["Returns policy","Contact Support","Store Information"],topic:"delivery"}));
+
+add("returns",["return","refund","exchange","cancel","faulty","broken","warranty","repair","unwanted"], q => /faulty|broken|warranty|repair/.test(q) ? ({
+  text:"If an item is faulty, email <a href='mailto:"+CFG.email+"'>"+CFG.email+"</a> with the <b>fault description and your order number</b>. You can choose a <b>repair, exchange or refund</b>. Please <b>don't try to fix it yourself</b> – that can void the warranty. Warranty length depends on the manufacturer. Full details: <a href='"+U("/returns-policy/")+"' target='_blank' rel='noopener'>Returns Policy</a>.",
+  chips:["Unwanted item returns","Contact Support"],topic:"returns"}) : ({
+  text:"For <b>online orders</b> you can cancel within <b>14 days of receiving</b> your order:<ul><li>Email <a href='mailto:"+CFG.email+"'>"+CFG.email+"</a> with your order number.</li><li>You then have another 14 days to send it back.</li><li>Items must be <b>unopened, unused or unworn</b> in original packaging with the seal intact.</li><li>Return shipping is the customer's responsibility unless the item is faulty.</li><li>Most refunds are made within 3 working days (up to 7).</li></ul>Read the full <a href='"+U("/returns-policy/")+"' target='_blank' rel='noopener'>Returns Policy</a>.",
+  chips:["Faulty item","Delivery information","Contact Support"],topic:"returns"}));
+
+add("store",["store","shop address","where are you","location","opening","hours","open","visit","london","address","directions","click and collect"], () => ({
+  text:"<b>NEO Airguns</b><br>📍 "+CFG.address+"<br>🕒 "+CFG.hours+"<br>📞 <a href='tel:"+CFG.tel+"'>"+CFG.phone+"</a><br>✉️ <a href='mailto:"+CFG.email+"'>"+CFG.email+"</a><br><br>Learn more on our <a href='"+U("/about-us/")+"' target='_blank' rel='noopener'>About Us</a> page.",
+  chips:["Contact Support","Explore Products"],topic:"store"}));
+
+add("law",["law","legal","licence","license","age","18","ukara","12 ft","foot pound","firearms certificate","rif","allowed","legally"], () => ({
+  text:"General guidance only: you must be <b>18+</b> to buy from NEO. UK air weapon and airsoft rules (including UKARA registration or a valid defence for airsoft, and power limits for unlicensed air guns) apply, and you are responsible for following them. Read the government's <a href='https://assets.publishing.service.gov.uk/media/64b7b73a0ea2cb001315e5cc/Air_weapons_safety_leaflet_6-4.pdf' target='_blank' rel='noopener'>Air weapons safety leaflet</a>, and ask our team if you're unsure.",
+  chips:["Contact Support","Explore Products"],topic:"law"}));
+
+add("contact",["contact","support","human","person","speak","talk","call","email","phone","help","complaint","order status","my order"], () => ({
+  text:"Our team will be happy to help:<br>✉️ <a href='mailto:"+CFG.email+"'>"+CFG.email+"</a><br>📞 <a href='tel:"+CFG.tel+"'>"+CFG.phone+"</a><br>🕒 "+CFG.hours+"<br><br>For order queries, please include your order number.",
+  chips:["Store Information","Delivery & Returns"],topic:"contact"}));
+
+add("thanks",["thanks","thank you","cheers","great","perfect","ok thanks"], () => ({text:"You're welcome! Anything else I can help you find?",chips:["Explore Products","Contact Support"],topic:"thanks"}));
+
+/* Safety filter – checked first */
+const UNSAFE = /(mod(ify|ification)?|upgrade|tune|tuning|hop[- ]?up (mod|hack)|increase (the )?(power|fps|velocity|joule)|more power|boost|power ?up|over ?power|remove (the )?(limiter|restrictor)|unlimit|convert|full[- ]?auto conversion|make it (stronger|lethal)|hurt|harm|kill|shoot (a |an )?(person|people|someone|animal|dog|cat)|silencer (build|make)|make (my own )?(bb|pellet|gun|silencer)|3d print)/i;
+
+/* Contextual follow-ups: short phrases resolved against last topic */
+const FOLLOW = [
+  {re:/^(cheaper|budget|cheapest|under|affordable|less expensive)/, fn:t=>({text:"I can't quote prices here, but you can sort any category by price on the website. Open the category and use the sorting option:",cards:catCards(t==="airguns"?["airguns"]:t==="airsoft"?["airsoft"]:["all"]),chips:["Contact Support","Explore Products"],topic:t})},
+  {re:/^(more|other|else|anything else|show more)/, fn:t=>({text:"Here's the full range to browse:",cards:catCards(["all","airsoft","airguns","optics"]),chips:["Explore Products","Contact Support"],topic:t})},
+  {re:/^(and |what about |how about )?(pistols?|rifles?)\??$/, fn:t=>t==="airguns"?I.find(i=>i.id==="airrifle").fn("air pistol"):I.find(i=>i.id==="airsoft").fn("pistol")}
+];
+
+/* ============ MOCK AI ENGINE (swap for OpenAI via your server) ============ */
+function scoreIntent(q){
+  let best=null,bs=0;
+  for(const it of I){let s=0;for(const k of it.kw){if(q.includes(k)) s+=k.length>3?2:1;}
+    if(s>bs){bs=s;best=it;}}
+  return bs>0?best:null;
+}
+const ctx = {topic:null, history:[]};
+async function getAIReply(userText){
+  /* Real integration (server-side proxy holds the key):
+     const r = await fetch(CFG.apiEndpoint,{method:"POST",headers:{"Content-Type":"application/json"},
+       body:JSON.stringify({messages:ctx.history})}); return await r.json(); // {text,cards,chips}  */
+  const q = userText.toLowerCase().trim();
+  if(UNSAFE.test(q)) return SAFETY_REPLY;
+  const f = FOLLOW.find(f=>f.re.test(q)); if(f && ctx.topic) return f.fn(ctx.topic);
+  const it = scoreIntent(q);
+  if(it) return it.fn(q,ctx);
+  return {text:"I'm not sure about that one, and I don't want to give you wrong information. Our team can help directly:<br>✉️ <a href='mailto:"+CFG.email+"'>"+CFG.email+"</a> · 📞 "+CFG.phone+"<br><br>Meanwhile, I can help with products, delivery, returns or store info.",
+    chips:["Explore Products","Delivery & Returns","Contact Support"],topic:ctx.topic};
+}
+
+/* Quick-suggestion labels → queries */
+const QUICK = {
+  "Explore Products":"explore products","Product Information":"__info","Delivery & Returns":"__delret","Store Information":"store information","Contact Support":"contact support",
+  "Returns policy":"returns policy","Unwanted item returns":"unwanted item return","Returns for faulty items":"faulty item return","Delivery information":"delivery information",
+  "UK Air Gun Law":"air gun law","UK airsoft rules":"airsoft law","Air gun law":"air gun law","Spring vs CO₂ vs PCP":"difference spring co2 pcp","Faulty item":"faulty item",
+  "Eye protection":"eye protection","Face protection":"face protection","Batteries & chargers":"batteries","Airsoft BBs":"airsoft bbs","Airsoft guns":"airsoft",
+  "I'm new to airsoft":"new to airsoft","I'm new to air rifles":"air rifle","Show me eyewear":"glasses","Accessories":"scope","Mounts & rails":"rails mounts","Brands: Vortex":"vortex",
+  "Holsters & cases":"case holster","Maintenance":"maintenance","Cases":"case","Scopes":"scope","Pellets":"pellets"
+};
+
+/* ============ UI ============ */
+const $ = s => document.querySelector(s);
+const msgs=$("#msgs"), inp=$("#inp"), send=$("#send"), win=$("#neo-chat"), launcher=$("#neo-launcher");
+let busy=false;
+const scroll = () => requestAnimationFrame(()=>msgs.scrollTo({top:msgs.scrollHeight,behavior:"smooth"}));
+const esc = s => s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function el(cls,html){const d=document.createElement("div");d.className=cls;if(html!=null)d.innerHTML=html;msgs.appendChild(d);scroll();return d;}
+const ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>';
+
+function renderCards(list){
+  const w=el("cards");
+  list.forEach(c=>{
+    const a=document.createElement("a");a.className="card";a.href=c.url;a.target="_blank";a.rel="noopener";
+    const img=c.image?`<div class="img" style="background-image:url('${esc(c.image)}')"></div>`:`<div class="img">${ICON}</div>`;
+    a.innerHTML=img+`<div class="b"><div class="n">${esc(c.name)}</div>`+(c.sub?`<div class="s">${esc(c.sub)}</div>`:"")+(c.price?`<div class="p">${esc(c.price)}</div>`:"")+`<div class="go">View on NEO →</div></div>`;
+    w.appendChild(a);
+  });
+}
+function renderChips(list){
+  const w=el("chips");
+  list.forEach(l=>{const b=document.createElement("button");b.className="chip";b.textContent=l;b.onclick=()=>handle(l);w.appendChild(b);});
+}
+function clearChips(){msgs.querySelectorAll(".chips,.tiles").forEach(c=>c.remove());}
+function botRow(html,extra){const r=document.createElement("div");r.className="brow";r.innerHTML='<div class="bav">N</div><div class="m bot '+(extra||"")+'">'+html+"</div>";msgs.appendChild(r);scroll();return r;}
+const rand=([a,b])=>a+Math.random()*(b-a);
+
+async function botReply(r){
+  const t=botRow('<span></span><span></span><span></span>',"typing");
+  await new Promise(res=>setTimeout(res,rand(CFG.typingMs)));
+  t.remove();
+  botRow(r.text);
+  if(r.cards?.length){await new Promise(r=>setTimeout(r,250));renderCards(r.cards);}
+  if(r.chips?.length){await new Promise(r=>setTimeout(r,200));renderChips(r.chips);}
+  if(r.topic) ctx.topic=r.topic;
+  ctx.history.push({role:"assistant",content:r.text.replace(/<[^>]+>/g," ")});
+  scroll();
+}
+
+async function handle(raw){
+  const text=(raw||"").trim(); if(!text||busy) return;
+  busy=true;send.disabled=true;clearChips();
+  el("m user",esc(text));
+  ctx.history.push({role:"user",content:text});
+  let q=QUICK[text]||text;
+  let r;
+  if(q==="__info") r={text:"What would you like to know about?",chips:["Spring vs CO₂ vs PCP","I'm new to airsoft","Scopes","UK Air Gun Law","Maintenance"],topic:"info"};
+  else if(q==="__delret") r={text:"Which would you like to know about?",chips:["Delivery information","Returns policy","Faulty item"],topic:"delivery"};
+  else r=await getAIReply(q);
+  await botReply(r);
+  busy=false;send.disabled=false;if(!matchMedia("(max-width:520px)").matches) inp.focus();
+}
+
+const IC=d=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const TILES=[
+ ["Explore Products","Guns, optics & gear",IC('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>')],
+ ["Product Information","Types, ammo & advice",IC('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>')],
+ ["Delivery & Returns","Shipping & refunds",IC('<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/>')],
+ ["Store Information","Address & opening hours",IC('<path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/>')],
+ ["Contact Support","Talk to our team",IC('<path d="M4 13v-1a8 8 0 0 1 16 0v1"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/>')]
+];
+function welcome(){
+  botRow("Hello! Welcome to NEO Airguns. I'm your AI shopping assistant. How can I help you today?");
+  const g=el("tiles");
+  TILES.forEach(([l,sub,ic])=>{const b=document.createElement("button");b.className="tile";b.innerHTML=`<span class="ti">${ic}</span><span><b>${l}</b><small>${sub}</small></span>`;b.onclick=()=>handle(l);g.appendChild(b);});
+}
+/* Pull colours/font from the live site when embedded (falls back to the tokens above) */
+function syncTheme(){
+  try{
+    const ok=c=>c&&c!=="transparent"&&!/rgba\(.*,\s*0\)/.test(c);
+    const q=(sel,prop)=>{const e=document.querySelector(sel);return e?getComputedStyle(e)[prop]:null;};
+    const rs=document.documentElement.style;
+    const acc=q(".single_add_to_cart_button,.add_to_cart_button,.wp-element-button,.button.alt","backgroundColor");
+    if(ok(acc)){rs.setProperty("--neo-accent",acc);
+      const [r,g,b]=acc.match(/\d+/g).map(Number);rs.setProperty("--neo-accent-ink",(0.299*r+0.587*g+0.114*b)>160?"#111":"#fff");}
+    const hd=q("header.site-header,.site-header,header","backgroundColor");
+    if(ok(hd)&&hd!=="rgb(255, 255, 255)")rs.setProperty("--neo-ink",hd);
+    const f=q("body","fontFamily");if(f&&document.querySelector(".site-header,header"))rs.setProperty("--neo-font",f);
+  }catch(e){}
+}
+syncTheme();
+function open(){win.classList.remove("closed","min");launcher.classList.add("hide");if(!msgs.children.length)welcome();setTimeout(()=>inp.focus({preventScroll:true}),300);}
+function close(){win.classList.add("closed");launcher.classList.remove("hide");}
+
+launcher.onclick=open;
+$("#b-close").onclick=close;
+$("#b-min").onclick=()=>win.classList.toggle("min");
+$(".hd").addEventListener("click",e=>{if(win.classList.contains("min")&&!e.target.closest(".ib"))win.classList.remove("min");});
+$("#b-clear").onclick=()=>{msgs.innerHTML="";ctx.topic=null;ctx.history=[];busy=false;send.disabled=false;welcome();};
+send.onclick=()=>{const v=inp.value;inp.value="";handle(v);};
+inp.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send.click();}});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!win.classList.contains("closed"))close();});
+})();
+</script>
+</body>
+</html>
